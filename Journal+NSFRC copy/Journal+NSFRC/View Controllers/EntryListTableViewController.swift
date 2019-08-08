@@ -9,28 +9,31 @@
 import UIKit
 import CoreData
 
-class EntryListTableViewController: UITableViewController {
+class EntryListTableViewController: UITableViewController{
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        // makes entrytvc to a delegate
+        EntryController.sharedInstance.fetchResultsController.delegate = self
     }
     
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        tableView.reloadData()
-    }
+//not necessary anymore w/ nsfetchresultscontroller, because each cell is essentially doing this
+//    override func viewWillAppear(_ animated: Bool) {
+//        super.viewWillAppear(animated)
+//        tableView.reloadData()
+//    }
     
     // MARK: - Table view data source
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return EntryController.sharedInstance.entries.count
+        return EntryController.sharedInstance.fetchResultsController.fetchedObjects?.count ?? 0
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "entryCell", for: indexPath)
 
-        let entry = EntryController.sharedInstance.entries[indexPath.row]
-       guard let entryDate = entry.timestamp else { return UITableViewCell() }
+        guard let entry = EntryController.sharedInstance.fetchResultsController.fetchedObjects?[indexPath.row], let entryDate = entry.timestamp else { return UITableViewCell() }
+        
         let formattedEntryDate = DateFormatter.localizedString(from: entryDate, dateStyle: .short, timeStyle: .short)
         
         cell.textLabel?.text = entry.title
@@ -46,9 +49,10 @@ class EntryListTableViewController: UITableViewController {
     // Override to support editing the table view.
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
         if editingStyle == .delete {
-             let entry = EntryController.sharedInstance.entries[indexPath.row]
-            EntryController.sharedInstance.deleteEntry(entry:entry)
-            tableView.deleteRows(at: [indexPath], with: .fade)
+            guard let entry = EntryController.sharedInstance.fetchResultsController.fetchedObjects?[indexPath.row] else { return }
+            
+            EntryController.sharedInstance.deleteEntry(entry: entry)
+//            tableView.deleteRows(at: [indexPath], with: .fade)
         }
     }
     
@@ -61,9 +65,35 @@ class EntryListTableViewController: UITableViewController {
             
             guard let selectedIndexPath = tableView.indexPathForSelectedRow, let destinationVC = segue.destination as? EntryDetailViewController else { return}
             
-            let entry = EntryController.sharedInstance.entries[selectedIndexPath.row]
+            guard let entry = EntryController.sharedInstance.fetchResultsController.fetchedObjects?[selectedIndexPath.row] else { return }
             
             destinationVC.entry = entry
+        }
+    }
+}
+
+extension EntryListTableViewController: NSFetchedResultsControllerDelegate {
+    func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?) {
+        
+        switch type {
+            
+        case .delete:
+            guard let indexPath = indexPath else {return}
+            tableView.deleteRows(at: [indexPath], with: .automatic)
+            
+        case .insert:
+            guard let newIndexPath = newIndexPath else {return}
+            tableView.insertRows(at: [newIndexPath], with: .automatic)
+            
+        case .move:
+            guard let oldIndexPath = indexPath, let newIndexPath = newIndexPath else {return}
+            tableView.moveRow(at: oldIndexPath, to: newIndexPath)
+            
+        case .update:
+            guard let indexPath = indexPath else {return}
+            tableView.reloadRows(at: [indexPath], with: .automatic)
+        @unknown default:
+            fatalError()
         }
     }
 }
